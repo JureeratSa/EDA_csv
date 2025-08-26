@@ -1,0 +1,60 @@
+import neurokit2 as nk
+import numpy as np
+import pandas as pd
+import os
+
+# อ่านข้อมูล EDA
+eda_signal = pd.read_csv(r"D:\DataCenter\Dek66\kk\Emotibit-10min\S08\RAW\Warm Pain\2025-08-23_14-50-39-730070_EA.csv")
+rateOfSample = 15  # ค่า sampling rate ของ EDA
+
+painLevel = 1
+
+# ไฟล์และโฟลเดอร์
+save_folder = r"D:\DataCenter\Dek66\kk\Emotibit-10min\S08\RAW\Warm Pain"
+output_filename = "S06_EDA_warmpain.csv"
+
+def min_to_sampling(minute, sr):
+    return int(minute * 60 * sr)
+
+rest = min_to_sampling(2, rateOfSample)
+stop = min_to_sampling(12, rateOfSample)
+
+# ทำความสะอาดสัญญาณ
+eda_cleaned = nk.eda_clean(eda_signal['EA'], sampling_rate=rateOfSample)
+
+# แยก tonic และ phasic
+eda_decomposed = nk.eda_phasic(eda_cleaned, sampling_rate=rateOfSample, method='cvxeda')
+
+# เลือกข้อมูลช่วง 2-12 นาที
+body = eda_decomposed[rest:stop]
+
+# คำนวณ baseline tonic
+head = eda_decomposed[0:rest]
+baselineTonic = float(np.mean(head["EDA_Tonic"]))
+
+# สร้าง timestamp (วินาที)
+timestamps = np.arange(len(body)) / rateOfSample
+
+# สร้าง DataFrame สำหรับส่งออก
+output_data = pd.DataFrame({
+    'timestamp': timestamps,
+    'EDA_Tonic': body["EDA_Tonic"].values - baselineTonic,  # debase จาก baseline
+    'EDA_Phasic': body["EDA_Phasic"].values,
+    'painLevel': painLevel
+})
+
+# บันทึกเป็น CSV
+output_path = os.path.join(save_folder, output_filename)
+output_data.to_csv(output_path, index=False)
+
+print(f"Saved CSV file: {output_path}")
+print(f"Data shape: {output_data.shape}")
+print(f"Columns: {list(output_data.columns)}")
+print(f"Time range: {timestamps[0]:.2f} - {timestamps[-1]:.2f} seconds")
+print(f"Pain Level: {painLevel}")
+
+# แสดงตัวอย่างข้อมูล 5 แถวแรกและ 5 แถวสุดท้าย
+print("\nFirst 5 rows:")
+print(output_data.head())
+print("\nLast 5 rows:")
+print(output_data.tail())
